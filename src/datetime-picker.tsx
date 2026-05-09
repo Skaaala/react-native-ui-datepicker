@@ -8,8 +8,6 @@ import React, {
 import { I18nManager } from 'react-native';
 import {
   dateToUnix,
-  getEndOfDay,
-  getStartOfDay,
   areDatesOnSameDay,
   removeTime,
 } from './utils';
@@ -31,7 +29,7 @@ import type {
 } from './types';
 import Calendar from './components/calendar';
 import { useDeepCompareMemo } from './utils';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import localeData from 'dayjs/plugin/localeData';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
@@ -294,12 +292,15 @@ const DateTimePicker = (
 
   useEffect(() => {
     if (mode === 'single') {
-      let _date =
-        (date &&
-          (timePicker
-            ? dayjs.tz(date, timeZone)
-            : getStartOfDay(dayjs.tz(date, timeZone)))) ??
-        date;
+      let _date: Dayjs | undefined;
+
+      if (date) {
+        _date = timeZone ? dayjs(date).tz(timeZone) : dayjs(date);
+
+        if (!timePicker) {
+          _date = _date.startOf('day');
+        }
+      }
 
       if (_date && maxDate && dayjs.tz(_date, timeZone).isAfter(maxDate)) {
         _date = dayjs.tz(maxDate, timeZone);
@@ -395,9 +396,9 @@ const DateTimePicker = (
     (selectedDate: DateType) => {
       if (onChange) {
         if (mode === 'single') {
-          const newDate = timePicker
-            ? dayjs.tz(selectedDate, timeZone)
-            : dayjs.tz(getStartOfDay(selectedDate), timeZone);
+          const newDate = (
+            timeZone ? dayjs(selectedDate).tz(timeZone) : dayjs(selectedDate)
+          ).startOf('day');
 
           dispatch({
             type: CalendarActionKind.CHANGE_CURRENT_DATE,
@@ -405,7 +406,7 @@ const DateTimePicker = (
           });
 
           (onChange as SingleChange)({
-            date: newDate ? dayjs(newDate).toDate() : newDate,
+            date: newDate.toDate(),
           });
         } else if (mode === 'range') {
           // set time to 00:00:00
@@ -474,27 +475,39 @@ const DateTimePicker = (
               endDate: undefined,
             });
           } else {
-            (onChange as RangeChange)({
-              startDate: isStart
-                ? dayjs(selected).toDate()
-                : start
-                  ? dayjs(start).toDate()
-                  : start,
-              endDate: !isStart
-                ? dayjs(getEndOfDay(selected)).toDate()
-                : end
-                  ? dayjs(getEndOfDay(end)).toDate()
-                  : end,
-            });
+            const startDate = isStart
+              ? (timeZone ? dayjs(selected).tz(timeZone) : dayjs(selected))
+                  .startOf('day')
+                  .toDate()
+              : start
+                ? (timeZone ? dayjs(start).tz(timeZone) : dayjs(start))
+                    .startOf('day')
+                    .toDate()
+                : start;
+
+            const endDate = !isStart
+              ? (timeZone ? dayjs(selected).tz(timeZone) : dayjs(selected))
+                  .endOf('day')
+                  .toDate()
+              : end
+                ? (timeZone ? dayjs(end).tz(timeZone) : dayjs(end))
+                    .endOf('day')
+                    .toDate()
+                : end;
+            (onChange as RangeChange)({ startDate, endDate });
           }
         } else if (mode === 'multiple') {
           const safeDates = (stateRef.current.dates as DateType[]) || [];
           const newDate = dayjs(selectedDate, timeZone).startOf('day');
 
-          const exists = safeDates.some((ed) => areDatesOnSameDay(ed, newDate));
+          const exists = safeDates.some((ed) =>
+            areDatesOnSameDay(ed, newDate, timeZone)
+          );
 
           const newDates = exists
-            ? safeDates.filter((ed) => !areDatesOnSameDay(ed, newDate))
+            ? safeDates.filter(
+                (ed) => !areDatesOnSameDay(ed, newDate, timeZone)
+              )
             : [...safeDates, newDate];
 
           if (max && newDates.length > max) {

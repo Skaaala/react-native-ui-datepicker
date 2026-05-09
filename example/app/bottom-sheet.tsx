@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { Button, StyleSheet } from 'react-native';
+import { Button, StyleSheet, View, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   BottomSheetModal,
@@ -10,6 +10,7 @@ import DateTimePicker, {
   DateType,
   useDefaultStyles,
 } from 'react-native-ui-datepicker';
+import dayjs from 'dayjs';
 
 export default function BottomSheetScreen() {
   const defaultStyles = useDefaultStyles();
@@ -29,6 +30,19 @@ export default function BottomSheetScreen() {
   //   console.log('handleSheetChanges', index);
   // }, []);
 
+  const timezone = 'Europe/Prague';
+  const today = dayjs().tz(timezone).format('YYYY-MM-DD');
+
+  const minDate = dayjs
+    .tz(today, 'YYYY-MM-DD', timezone)
+    .subtract(2, 'day')
+
+
+  const maxDate = dayjs
+    .tz(today, 'YYYY-MM-DD', timezone)
+    .add(2, 'day')
+
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <BottomSheetModalProvider>
@@ -38,15 +52,21 @@ export default function BottomSheetScreen() {
           //onChange={handleSheetChanges}
         >
           <BottomSheetView style={styles.contentContainer}>
+            <View>
+              <Text>{date ? dayjs(date).utc().format() : 'Not selected'}</Text>
+            </View>
             <DateTimePicker
               styles={defaultStyles}
               mode="single"
               date={date}
               onChange={(params) => setDate(params.date)}
-              firstDayOfWeek={6}
+              firstDayOfWeek={1}
               multiRangeMode
               showOutsideDays
               timePicker
+              timeZone={timezone}
+              minDate={minDate}
+              maxDate={maxDate}
               //calendar="jalali"
               //locale="en"
               //numerals="arabext"
