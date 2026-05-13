@@ -45,16 +45,17 @@ const Days = () => {
   } = useCalendarContext();
 
   const style = useMemo(() => createDefaultStyles(isRTL), [isRTL]);
-
-  const { year, month, hour, minute } = getParsedDate(currentDate);
+  const { year, month } = getParsedDate(currentDate);
 
   const handleSelectDate = useCallback(
     (selectedDate: DateType) => {
-      const newDate = getDate(selectedDate).hour(hour).minute(minute);
+      const newDate = (
+        timeZone ? dayjs(selectedDate).tz(timeZone) : getDate(selectedDate)
+      ).startOf('day');
 
       onSelectDate(newDate);
     },
-    [onSelectDate, hour, minute]
+    [onSelectDate, timeZone]
   );
 
   const containerStyle = useMemo(
@@ -72,7 +73,7 @@ const Days = () => {
       prevMonthOffset,
       daysInCurrentMonth,
       daysInNextMonth,
-    } = getDaysInMonth(currentDate, showOutsideDays, firstDayOfWeek);
+    } = getDaysInMonth(currentDate, showOutsideDays, firstDayOfWeek, timeZone);
 
     return getMonthDays(
       currentDate,
@@ -86,7 +87,8 @@ const Days = () => {
       prevMonthOffset,
       daysInCurrentMonth,
       daysInNextMonth,
-      numerals
+      numerals,
+      timeZone
     ).map((day, index) => {
       if (!day) return null;
 
@@ -94,7 +96,8 @@ const Days = () => {
       let rightCrop = day.dayOfMonth === fullDaysInMonth;
       const isFirstDayOfMonth = day.dayOfMonth === 1;
       const isLastDayOfMonth = day.dayOfMonth === fullDaysInMonth;
-      const isToday = areDatesOnSameDay(day.date, today);
+      const isToday = areDatesOnSameDay(day.date, today, timeZone);
+
       let inRange = false;
       let isSelected = false;
       let isCrop = false;
@@ -104,8 +107,12 @@ const Days = () => {
 
       if (mode === 'range') {
         rightCrop = false;
-        const selectedStartDay = areDatesOnSameDay(day.date, startDate);
-        const selectedEndDay = areDatesOnSameDay(day.date, endDate);
+        const selectedStartDay = areDatesOnSameDay(
+          day.date,
+          startDate,
+          timeZone
+        );
+        const selectedEndDay = areDatesOnSameDay(day.date, endDate, timeZone);
         isSelected = selectedStartDay || selectedEndDay;
         inRange = isDateBetween(day.date, { startDate, endDate });
 
@@ -131,18 +138,20 @@ const Days = () => {
         rangeEnd = inRange && rightCrop;
       } else if (mode === 'multiple') {
         const safeDates = dates || [];
-        isSelected = safeDates.some((d) => areDatesOnSameDay(day.date, d));
+        isSelected = safeDates.some((d) =>
+          areDatesOnSameDay(day.date, d, timeZone)
+        );
 
         // if the selected days in a row, implements range mode style to selected days
         if (multiRangeMode) {
-          const yesterday = dayjs(day.date).subtract(1, 'day');
-          const tomorrow = dayjs(day.date).add(1, 'day');
+          const yesterday = dayjs(day.date).subtract(1, 'day').tz(timeZone);
+          const tomorrow = dayjs(day.date).add(1, 'day').tz(timeZone);
 
           const yesterdaySelected = safeDates.some((d) =>
-            areDatesOnSameDay(d, yesterday)
+            areDatesOnSameDay(d, yesterday, timeZone)
           );
           const tomorrowSelected = safeDates.some((d) =>
-            areDatesOnSameDay(d, tomorrow)
+            areDatesOnSameDay(d, tomorrow, timeZone)
           );
 
           // Reset all flags
@@ -184,7 +193,7 @@ const Days = () => {
           rangeEnd = inRange && rightCrop;
         }
       } else if (mode === 'single') {
-        isSelected = areDatesOnSameDay(day.date, date);
+        isSelected = areDatesOnSameDay(day.date, date, timeZone);
       }
 
       return {

@@ -134,16 +134,22 @@ export const getDateYear = (date: DateType) => dayjs(date).year();
  *
  * @param a - date to check
  * @param b - date to check
+ * @param timeZone - timeZone
  *
  * @returns true if dates are on the same day, false otherwise
  */
-export function areDatesOnSameDay(a: DateType, b: DateType) {
+export function areDatesOnSameDay(a: DateType, b: DateType, timeZone?: string) {
   if (!a || !b) {
     return false;
   }
 
-  const date_a = dayjs(a).format(DATE_FORMAT);
-  const date_b = dayjs(b).format(DATE_FORMAT);
+  const date_a = timeZone
+    ? dayjs(a).tz(timeZone).format(DATE_FORMAT)
+    : dayjs(a).format(DATE_FORMAT);
+
+  const date_b = timeZone
+    ? dayjs(b).tz(timeZone).format(DATE_FORMAT)
+    : dayjs(b).format(DATE_FORMAT);
 
   return date_a === date_b;
 }
@@ -192,38 +198,57 @@ export function isDateDisabled(
     maxDate,
     enabledDates,
     disabledDates,
+    timeZone,
   }: {
     minDate?: DateType;
     maxDate?: DateType;
-    enabledDates?: DateType[] | ((date: DateType) => boolean) | undefined;
-    disabledDates?: DateType[] | ((date: DateType) => boolean) | undefined;
+    enabledDates?: DateType[] | ((date: DateType) => boolean);
+    disabledDates?: DateType[] | ((date: DateType) => boolean);
+    timeZone?: string;
   }
 ): boolean {
-  if (minDate && date.isBefore(dayjs(minDate).startOf('day'))) {
-    return true;
+  const zonedDate = timeZone ? dayjs(date).tz(timeZone) : dayjs(date);
+
+  if (minDate) {
+    const min = (
+      timeZone ? dayjs(minDate).tz(timeZone) : dayjs(minDate)
+    ).startOf('day');
+
+    if (zonedDate.isBefore(min)) {
+      return true;
+    }
   }
-  if (maxDate && date.isAfter(dayjs(maxDate).endOf('day'))) {
-    return true;
+
+  if (maxDate) {
+    const max = (timeZone ? dayjs(maxDate).tz(timeZone) : dayjs(maxDate)).endOf(
+      'day'
+    );
+
+    if (zonedDate.isAfter(max)) {
+      return true;
+    }
   }
 
   if (enabledDates) {
     if (Array.isArray(enabledDates)) {
       const isEnabled = enabledDates.some((enabledDate) =>
-        areDatesOnSameDay(date, enabledDate)
+        areDatesOnSameDay(date, enabledDate, timeZone)
       );
+
       return !isEnabled;
-    } else if (enabledDates instanceof Function) {
-      return !enabledDates(date);
     }
-  } else if (disabledDates) {
+
+    return !enabledDates(date);
+  }
+
+  if (disabledDates) {
     if (Array.isArray(disabledDates)) {
-      const isDisabled = disabledDates.some((disabledDate) =>
-        areDatesOnSameDay(date, disabledDate)
+      return disabledDates.some((disabledDate) =>
+        areDatesOnSameDay(date, disabledDate, timeZone)
       );
-      return isDisabled;
-    } else if (disabledDates instanceof Function) {
-      return disabledDates(date);
     }
+
+    return disabledDates(date);
   }
 
   return false;
@@ -338,13 +363,15 @@ export const getYearRange = (year: number) => {
 export function getDaysInMonth(
   date: DateType,
   showOutsideDays: boolean | undefined,
-  firstDayOfWeek: number
+  firstDayOfWeek: number,
+  timeZone?: string
 ) {
-  const daysInCurrentMonth = dayjs(date).daysInMonth();
+  const zonedDate = timeZone ? dayjs(date).tz(timeZone) : dayjs(date);
+  const daysInCurrentMonth = zonedDate.daysInMonth();
 
-  const prevMonthDays = dayjs(date).add(-1, 'month').daysInMonth();
-  const firstDay = dayjs(date).date(1 - firstDayOfWeek);
-  const prevMonthOffset = firstDay.day() % 7;
+  const prevMonthDays = zonedDate.add(-1, 'month').daysInMonth();
+  const firstDateOfMonth = zonedDate.date(1);
+  const prevMonthOffset = (firstDateOfMonth.day() - firstDayOfWeek + 7) % 7;
   const daysInPrevMonth = showOutsideDays ? prevMonthOffset : 0;
   const monthDaysOffset = prevMonthOffset + daysInCurrentMonth;
   const daysInNextMonth = showOutsideDays
@@ -379,28 +406,6 @@ export function getFirstDayOfMonth(
 ): number {
   const d = getDate(date);
   return d.date(1 - firstDayOfWeek).day();
-}
-
-/**
- * Get start of day
- *
- * @param date - date to get start of day from
- *
- * @returns start of day
- */
-export function getStartOfDay(date: DateType): DateType {
-  return dayjs(date).startOf('day');
-}
-
-/**
- * Get end of day
- *
- * @param date - date to get end of day from
- *
- * @returns end of day
- */
-export function getEndOfDay(date: DateType): DateType {
-  return dayjs(date).endOf('day');
 }
 
 /**
@@ -455,6 +460,18 @@ export const getParsedDate = (date: DateType) => {
   };
 };
 
+export const createCalendarDate = (
+  baseMonth: dayjs.Dayjs,
+  day: number,
+  timeZone?: string
+) => {
+  const value = `${baseMonth.format('YYYY-MM')}-${String(day).padStart(2, '0')}`;
+
+  return timeZone
+    ? dayjs.tz(value, DATE_FORMAT, timeZone)
+    : dayjs(value, DATE_FORMAT);
+};
+
 /**
  * Calculate month days array based on current date
  *
@@ -484,14 +501,18 @@ export const getMonthDays = (
   prevMonthOffset: number,
   daysInCurrentMonth: number,
   daysInNextMonth: number,
-  numerals: Numerals
+  numerals: Numerals,
+  timeZone?: string
 ): CalendarDay[] => {
-  const date = dayjs(datetime);
+  const date = timeZone ? dayjs(datetime).tz(timeZone) : dayjs(datetime);
+  const prevMonth = date.add(-1, 'month');
+  const nextMonth = date.add(1, 'month');
 
   const prevDays = showOutsideDays
     ? Array.from({ length: prevMonthOffset }, (_, index) => {
         const number = index + (prevMonthDays - prevMonthOffset + 1);
-        const thisDay = date.add(-1, 'month').date(number);
+        const thisDay = createCalendarDate(prevMonth, number, timeZone);
+
         return generateCalendarDay(
           number,
           thisDay,
@@ -502,14 +523,17 @@ export const getMonthDays = (
           false,
           index + 1,
           firstDayOfWeek,
-          numerals
+          numerals,
+          timeZone
         );
       })
     : Array(prevMonthOffset).fill(null);
 
+
   const currentDays = Array.from({ length: daysInCurrentMonth }, (_, index) => {
     const day = index + 1;
-    const thisDay = date.date(day);
+    const thisDay = createCalendarDate(date, day, timeZone);
+
     return generateCalendarDay(
       day,
       thisDay,
@@ -520,13 +544,15 @@ export const getMonthDays = (
       true,
       prevMonthOffset + day,
       firstDayOfWeek,
-      numerals
+      numerals,
+      timeZone
     );
   });
 
   const nextDays = Array.from({ length: daysInNextMonth }, (_, index) => {
     const day = index + 1;
-    const thisDay = date.add(1, 'month').date(day);
+    const thisDay = createCalendarDate(nextMonth, day, timeZone);
+
     return generateCalendarDay(
       day,
       thisDay,
@@ -537,7 +563,8 @@ export const getMonthDays = (
       false,
       daysInCurrentMonth + prevMonthOffset + day,
       firstDayOfWeek,
-      numerals
+      numerals,
+      timeZone
     );
   });
 
@@ -569,9 +596,12 @@ const generateCalendarDay = (
   isCurrentMonth: boolean,
   dayOfMonth: number,
   firstDayOfWeek: number,
-  numerals: Numerals
+  numerals: Numerals,
+  timeZone?: string,
 ) => {
-  const startOfWeek = dayjs(date).startOf('week').add(firstDayOfWeek, 'day');
+  const startOfWeek = timeZone
+    ? dayjs(date).startOf('week').add(firstDayOfWeek, 'day').tz(timeZone)
+    : dayjs(date).startOf('week').add(firstDayOfWeek, 'day');
 
   return {
     text: formatNumber(number, numerals),
@@ -582,6 +612,7 @@ const generateCalendarDay = (
       maxDate,
       enabledDates,
       disabledDates,
+      timeZone,
     }),
     isCurrentMonth,
     dayOfMonth,
